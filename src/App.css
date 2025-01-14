@@ -1,0 +1,18 @@
+/* Ensure the table takes the full width of the container */
+.styled-table {
+    width: 100%;
+    border-collapse: separate;
+    border-spacing: 10px 5px;
+}
+
+.styled-table th,
+.styled-table td {
+    border: 1px solid #dee2e6;
+    padding: 8px;
+    background-color: #fff;
+}
+
+.center-align {
+    text-align: center;
+    vertical-align: middle;
+}
