@@ -54,7 +54,7 @@ const Auth = observer(() => {
                         type='password'
                     />
                     <Row className="d-flex justify-content-between mt-3 ps-3 pe-3">
-                        {isLogin ?
+                        {/* isLogin ?
                             <div style={{ marginBottom: 10 }}>
                                 Нет аккаунта? <NavLink to={REGISTRATION_ROUTE}>Зарегистрируйся!</NavLink>
                             </div>
@@ -62,7 +62,7 @@ const Auth = observer(() => {
                             <div style={{ marginBottom: 10 }}>
                                 Есть аккаунт? <NavLink to={LOGIN_ROUTE}>Войдите!</NavLink>
                             </div>
-                        }
+                        */}
                         <Button
                             style={{ marginStart: 0 }}
                             variant='outline-success'
