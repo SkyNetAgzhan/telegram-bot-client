@@ -3,7 +3,7 @@ import { Context } from '../index';
 import Nav from 'react-bootstrap/Nav';
 import Navbar from 'react-bootstrap/Navbar';
 import { NavLink } from 'react-router-dom';
-import { ANSWER_CREATE, ANSWER_ROUTE, LOGIN_ROUTE } from '../utils/consts';
+import { ANSWER_CREATE, ANSWER_ROUTE, LOGIN_ROUTE, POLLS_CREATE, POLLS_ROUTE } from '../utils/consts';
 import { Button, Container } from 'react-bootstrap';
 import { observer } from 'mobx-react-lite';
 import { useHistory } from 'react-router-dom/cjs/react-router-dom.min';
@@ -36,6 +36,24 @@ const TempNavBar = observer(() => {
                 )}
                 {user.isAuth ? (
                     <Nav className="ml-auto" style={{ color: 'white' }}>
+                        <NavLink to={POLLS_ROUTE} style={{ color: 'white', textDecoration: 'none'}}>
+                            <Button
+                            variant="outline-light"
+                            style={{ marginRight: 12 }}
+                            onClick={() => history.push(ANSWER_CREATE)}
+                            >
+                                Голосования
+                            </Button>
+                        </NavLink>
+                        <NavLink to={POLLS_CREATE} style={{ color: 'white', textDecoration: 'none'}}>
+                            <Button
+                                variant="outline-light"
+                                style={{ marginRight: 12 }}
+                                onClick={() => history.push(ANSWER_CREATE)}
+                                >
+                                    Создать голосования
+                            </Button>
+                        </NavLink>
                         <Button
                             variant="outline-light"
                             style={{ marginRight: 12 }}
