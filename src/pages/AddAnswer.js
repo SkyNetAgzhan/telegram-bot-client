@@ -1,35 +1,53 @@
+// AddAnswer.js (пример)
 import React, { useState } from 'react';
-import { Button, Container } from 'react-bootstrap';
-import CreateAnswer from '../components/CreateAnswer';
+import { Container, Button } from 'react-bootstrap';
 import CreateCategory from '../components/CreateCategory';
+import CreateSubCategory from '../components/CreateSubCategory';
+import CreateSubCategoryDoc from '../components/CreateSubCategoryDoc';
 
 const AddAnswer = () => {
-    const [createAnswerVisible, setCreateAnswerVisible] = useState(false);
-    const [createCategoryVisible, setCreateCategoryVisible] = useState(false);
+    const [showCatModal, setShowCatModal] = useState(false);
+    const [showSubCatModal, setShowSubCatModal] = useState(false);
+    const [showDocModal, setShowDocModal] = useState(false);
 
     return (
         <Container className='d-flex flex-column'>
             <Button
                 variant='outline-dark'
-                className='mt-4 p-2'
-                onClick={() => setCreateCategoryVisible(true)} // Show create category modal
+                className='mt-3'
+                onClick={() => setShowCatModal(true)}
             >
-                Добавить категорию
+                Создать категорию (RU/KZ)
             </Button>
+
             <Button
                 variant='outline-dark'
-                className='mt-4 p-2'
-                onClick={() => setCreateAnswerVisible(true)} // Show create answer modal
+                className='mt-3'
+                onClick={() => setShowSubCatModal(true)}
             >
-                Добавить ряд к категории
+                Создать подкатегорию (без документа)
             </Button>
-            <CreateAnswer
-                show={createAnswerVisible}
-                onHide={() => setCreateAnswerVisible(false)}
+
+            <Button
+                variant='outline-dark'
+                className='mt-3'
+                onClick={() => setShowDocModal(true)}
+            >
+                Создать подкатегорию с документом
+            </Button>
+
+            {/* Модальные окна */}
+            <CreateCategory 
+                show={showCatModal} 
+                onHide={() => setShowCatModal(false)} 
             />
-            <CreateCategory
-                show={createCategoryVisible}
-                onHide={() => setCreateCategoryVisible(false)}
+            <CreateSubCategory 
+                show={showSubCatModal} 
+                onHide={() => setShowSubCatModal(false)} 
+            />
+            <CreateSubCategoryDoc 
+                show={showDocModal} 
+                onHide={() => setShowDocModal(false)} 
             />
         </Container>
     );

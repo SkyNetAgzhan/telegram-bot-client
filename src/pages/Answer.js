@@ -1,315 +1,257 @@
-import React, { useContext, useEffect, useState } from 'react';
-import { Container, Modal, Button, Form } from 'react-bootstrap';
-import { Context } from '..';
+import React, { useEffect, useState, useContext } from 'react';
+import { Container, Table, Button, Form } from 'react-bootstrap';
 import { observer } from 'mobx-react-lite';
-import { fetchAnswers, deleteAnswer, swapCategoriesAndSubs, swapSubs} from '../http/answerApi';
-import AnswerTree from '../components/AnswerTree';
-import '../App.css'; // Ensure you have the App.css imported for the styles
+import { Context } from '../index';
 
+import { fetchAnswers, createAnswer, deleteAnswer, swapCategoriesAndSubs } from '../http/answerApi';
+
+// Пример: константы для "глобальных" родительских ID:
+const RUSSIAN_ROOT = 2;
+const KAZAKH_ROOT = 3;
+
+/**
+ * Пример компонента: показывает 
+ * 1) Только категории, у которых parentid = 2 или 3 
+ * 2) Рекурсивно внутри — подкатегории и документы (isnode=true / isnode=false) 
+ * 3) Возможность создать/удалить "Голосование"/"Дауыс беру" (answer="poll_trigger") 
+ * 4) Возможность свапнуть категории
+ */
 const Answer = observer(() => {
-    const { answer } = useContext(Context);
-    // Список «категорий» (isnode=true, parentid>1)
-    const [categories, setCategories] = useState([]);
+  const { answer } = useContext(Context);
 
-    // Для модального окна свапа
-    const [showSwapModal, setShowSwapModal] = useState(false);
-    const [selectedCategoryId, setSelectedCategoryId] = useState(null); // какую категорию хотим «свапнуть»
-    const [targetCategoryId, setTargetCategoryId] = useState('');       // с какой категорией «свапать»
+  // Для свапа:
+  const [swapA, setSwapA] = useState('');
+  const [swapB, setSwapB] = useState('');
 
-    // Для модального окна свапа подкатегорий
-    const [showSwapModalSub, setShowSwapModalSub] = useState(false);
-    const [selectedSubid, setSelectedSubid] = useState(null);
-    const [targetSubId, setTargetSubId] = useState('');
+  // Для "глобальных" сообщений об ошибках и т.д.
+  const [info, setInfo] = useState('');
 
-    useEffect(() => {
-        fetchAnswers().then(data => {
-            answer.setAnswers(data);
-            data.rows.sort((a,b) => a.id  - b.id);
-            // Фильтруем только категории (isnode = true) и parentid > 1
-            const filteredCategories = data.rows.filter(ans => ans.isnode === true && ans.parentid > 1);
-            setCategories(filteredCategories);
-        });
-    }, [answer]);
+  useEffect(() => {
+    loadAllAnswers();
+  }, []);
 
-    // Получаем все «строки» (isnode=false) у заданной категории
-    const getCategoryRows = (categoryId) => {
-        return answer.answers
-            .filter(ans => ans.parentid === categoryId && ans.isnode === false)
-            .sort((a,b) => a.id - b.id);
-    };
+  const loadAllAnswers = async () => {
+    try {
+      const data = await fetchAnswers();    // { rows: [...], count: ... }
+      answer.setAnswers(data);              // теперь answer.answers = data.rows (массив)
+    } catch (err) {
+      console.error('Ошибка при загрузке answers:', err);
+    }
+  };
 
-    // Удаление категории (исходный код)
-    const handleDeleteCategory = async (categoryId) => {
-        const isConfirmed = window.confirm('Вы уверены, что хотите удалить эту категорию и все связанные с ней ряды?');
-        if (!isConfirmed) return;
+  // Фильтруем "корневые" категории, у кого parentid = 2 или 3
+  // Это массив записей (isnode=true обычно, но вы можете проверить).
+  const topCategories = answer.answers.filter(
+    (cat) => (cat.parentid === RUSSIAN_ROOT || cat.parentid === KAZAKH_ROOT)
+  );
 
-        try {
-            // Сначала удаляем все дочерние «строки»
-            const rowsToDelete = getCategoryRows(categoryId);
-            for (const row of rowsToDelete) {
-                await deleteAnswer(row.id);
+  /**
+   * Рекурсивная функция, которая возвращает массив <tr> для всех подчинённых (и их детей).
+   * - `parentId` : число (ID родителя)
+   * - `level` : уровень вложенности (чтобы управлять отступами или стилями)
+   */
+  const renderRowsRecursive = (parentId, level = 0) => {
+    // Находим всех "детей" (isnode= false/true) данного parentId
+    const children = answer.answers.filter(item => item.parentid === parentId);
+
+    // Для каждого ребёнка:
+    //   - если isnode=true (подкатегория без документа), покажем (quest, "Категория")
+    //   - если isnode=false (с документом), тоже отобразим (quest, "Документ", fileName, и т.д.)
+    // рекурсивно добавим детей, если isnode=true
+    const rows = [];
+    children.forEach(child => {
+      const indentStyle = { paddingLeft: `${20 * level}px` };
+
+      rows.push(
+        <tr key={child.id}>
+          <td>{child.id}</td>
+          <td style={indentStyle}>
+            {child.quest}
+            {child.isnode
+              ? <span style={{color:'grey'}}> (категория)</span> 
+              : <span style={{color:'blue'}}> (документ)</span>
             }
-            // Удаляем категорию
-            await deleteAnswer(categoryId);
+          </td>
+          <td>{child.answer}</td>
+          <td>
+            {/* Кнопка удаления */}
+            <Button
+              variant="danger"
+              size="sm"
+              onClick={() => handleDelete(child.id)}
+            >
+              Удалить
+            </Button>
+          </td>
+        </tr>
+      );
 
-            // Обновляем локальный стейт
-            const updatedAnswers = answer.answers.filter(a => a.id !== categoryId && a.parentid !== categoryId);
-            answer.setAnswers({ rows: updatedAnswers });
-        } catch (error) {
-            alert('Ошибка при удалении категории');
-        }
-    };
+      // Если это категория (isnode=true), у неё могут быть свои подкатегории => рекурсия
+      if (child.isnode) {
+        const subRows = renderRowsRecursive(child.id, level + 1);
+        rows.push(...subRows);
+      }
+    });
+    return rows;
+  };
 
-    // Удаление конкретной «строки»
-    const handleDeleteRow = async (rowId) => {
-        const isConfirmed = window.confirm('Вы уверены, что хотите удалить этот ряд?');
-        if (!isConfirmed) return;
-
-        try {
-            await deleteAnswer(rowId);
-            const updatedAnswers = answer.answers.filter(a => a.id !== rowId);
-            answer.setAnswers({ rows: updatedAnswers });
-        } catch (error) {
-            alert('Ошибка при удалении ряда');
-        }
-    };
-
-    // === ЛОГИКА ДЛЯ СВАПА ===
-
-    // Клик по кнопке «Поменять местами» у конкретной категории
-    const handleOpenSwapModal = (categoryId) => {
-        setSelectedCategoryId(categoryId);
-        setTargetCategoryId(''); // сбрасываем выбор
-        setShowSwapModal(true);
-    };
-
-    // Подтверждаем свап
-    const handleConfirmSwap = async () => {
-        if (!targetCategoryId) {
-            alert('Пожалуйста, выберите категорию для обмена');
-            return;
-        }
-
-        if (selectedCategoryId === Number(targetCategoryId)) {
-            alert('Нельзя выбирать ту же категорию.');
-            return;
-        }
-
-        // Вызываем метод из API
-        if (!window.confirm(`Точно поменять местами категории #${selectedCategoryId} и #${targetCategoryId}?`)) {
-            return;
-        }
-
-        try {
-            await swapCategoriesAndSubs(selectedCategoryId, Number(targetCategoryId));
-            alert(`Категории #${selectedCategoryId} и #${targetCategoryId} успешно поменяны местами!`);
-            // Перезагружаем список
-            const data = await fetchAnswers();
-            answer.setAnswers(data);
-            const filtered = data.rows.filter(ans => ans.isnode === true && ans.parentid > 1);
-            setCategories(filtered);
-        } catch (error) {
-            alert('Ошибка при обмене категорий: ' + error.message);
-        } finally {
-            setShowSwapModal(false);
-        }
-    };
-
-    // Закрыть модальное окно
-    const handleCloseSwapModal = () => {
-        setShowSwapModal(false);
-    };
-
-    
-    // --- Свап подкатегории ---
-    const handleOpenSwapSubModal = (sub) => {
-        setSelectedSubid(sub);
-        setTargetSubId('');
-        setShowSwapModalSub(true);
+  // Удалить запись
+  const handleDelete = async (id) => {
+    if (!window.confirm('Точно удалить запись #' + id + '?')) return;
+    try {
+      await deleteAnswer(id);
+      // Локально обновляем store (или заново загружаем)
+      loadAllAnswers();
+      setInfo(`Запись #${id} удалена`);
+    } catch (err) {
+      alert('Ошибка при удалении: ' + err.message);
     }
+  };
 
-    const handleConfirmSwapSub = async () => {
-        if (!targetSubId){
-            alert('Выберите подкатегорию для обмена');
-            return;
-        }
-        if (selectedSubid === Number(targetSubId)) {
-            alert('Нельзя выбрать ту же самую подкатегорию!');
-            return;
-        }
-        if (!window.confirm(`Поменять местами подкатегории #${selectedSubid.id} и #${targetSubId}?`)){
-            return;
-        }
+  // === Создать/удалить "Голосование" (рус) или "Дауыс беру" (каз) ===
+  const createPollTrigger = async (lang) => {
+    // lang='ru' => "Голосование", parentid=2
+    // lang='kz' => "Дауыс беру", parentid=3
+    let quest = (lang === 'ru') ? 'Голосование' : 'Дауыс беру';
+    let parent = (lang === 'ru') ? RUSSIAN_ROOT : KAZAKH_ROOT;
+    const formData = new FormData();
+    formData.append('quest', quest);
+    formData.append('answer', 'poll_trigger');
+    formData.append('answertype', 'poll');
+    formData.append('isnode', false);  // не папка, а триггер
+    formData.append('parentid', parent);
 
-        try {
-            await swapSubs(selectedSubid.id, Number(targetSubId));
-            alert(`Подкатегории #${selectedSubid.id} и #${targetSubId} успешно поменяны местами!`);
-            const data = await fetchAnswers();
-            answer.setAnswers(data);
-        } catch (error) {
-            alert('Ошибка при свапе подкатегорий:' + error.message);
-        } finally {
-            handleCloseSwapModalSub();
-        }
+    try {
+      await createAnswer(formData);
+      loadAllAnswers();
+      setInfo(`Создано "${quest}"`);
+    } catch (err) {
+      alert('Ошибка при создании: ' + err.message);
     }
+  };
 
-    const handleCloseSwapModalSub = () => {
-        setShowSwapModalSub(false);
-        setSelectedSubid(null);
-    };
-
-    const getSiblingsForSelectedSub = () => {
-        if (!selectedSubid) return [];
-        return answer.answers
-            .filter(a => 
-                a.isnode === false &&
-                a.parentid === selectedSubid.parentid &&
-                a.id !== selectedSubid.id
-            )
-            .sort((a,b) => a.id - b.id);
-    };
-
-    return (
-        <Container>
-            <AnswerTree />
-
-            <h2>Категории ответов</h2>
-            {categories.length > 0 ? (
-                <table className="styled-table">
-                    <thead>
-                        <tr>
-                            <th className="center-align">ID</th>
-                            <th>Название категории</th>
-                            <th className="center-align">Действие</th>
-                        </tr>
-                    </thead>
-                    <tbody>
-                        {categories.map(category => (
-                            <tr key={category.id}>
-                                <td className="center-align">{category.id}</td>
-                                <td>{category.quest}</td>
-                                <td className="center-align">
-                                    <button onClick={() => handleDeleteCategory(category.id)}>Удалить</button>
-                                    {' '}
-                                    <button onClick={() => handleOpenSwapModal(category.id)}>
-                                        Поменять местами
-                                    </button>
-                                </td>
-                            </tr>
-                        ))}
-                    </tbody>
-                </table>
-            ) : (
-                <p>Нет доступных категорий</p>
-            )}
-
-            {categories.length > 0 ? (
-                categories.map(category => (
-                    <div key={category.id}>
-                        <h2>{category.quest}</h2>
-                        <table className="styled-table">
-                            <thead>
-                                <tr>
-                                    <th className="center-align">ID</th>
-                                    <th>Название темы</th>
-                                    <th>Название файла</th>
-                                    <th className="center-align">Действие</th>
-                                </tr>
-                            </thead>
-                            <tbody>
-                                {getCategoryRows(category.id).map(row => (
-                                    <tr key={row.id}>
-                                        <td className="center-align">{row.id}</td>
-                                        <td>{row.quest}</td>
-                                        <td>{row.answer}</td>
-                                        <td className="center-align">
-                                            <button onClick={() => handleDeleteRow(row.id)}>Удалить</button>
-                                            {' '}
-                                            <button onClick={() => handleOpenSwapSubModal(row)}>
-                                                Поменять местами
-                                            </button>
-                                        </td>
-                                    </tr>
-                                ))}
-                            </tbody>
-                        </table>
-                        <br/>
-                    </div>
-                ))
-            ) : (
-                <p>No categories available</p>
-            )}
-
-            {/* Модальное окно для свапа */}
-            <Modal show={showSwapModal} onHide={handleCloseSwapModal}>
-                <Modal.Header closeButton>
-                    <Modal.Title>Выберите категорию для обмена</Modal.Title>
-                </Modal.Header>
-                <Modal.Body>
-                    <Form.Label>Текущая категория: #{selectedCategoryId}</Form.Label>
-                    <Form.Select
-                        value={targetCategoryId}
-                        onChange={(e) => setTargetCategoryId(e.target.value)}
-                    >
-                        <option value="">-- Выберите категорию --</option>
-                        {categories
-                            .filter(cat => cat.id !== selectedCategoryId) // исключаем текущую
-                            .map(cat => (
-                                <option key={cat.id} value={cat.id}>
-                                    #{cat.id} — {cat.quest}
-                                </option>
-                            ))
-                        }
-                    </Form.Select>
-                </Modal.Body>
-                <Modal.Footer>
-                    <Button variant="secondary" onClick={handleCloseSwapModal}>
-                        Отмена
-                    </Button>
-                    <Button variant="primary" onClick={handleConfirmSwap}>
-                        Поменять местами
-                    </Button>
-                </Modal.Footer>
-            </Modal>
-
-            {/* Модальное окно для свапа подкатегорий */}
-            <Modal show={showSwapModalSub} onHide={handleCloseSwapModalSub}>
-                <Modal.Header closeButton>
-                    <Modal.Title>Свап подкатегории</Modal.Title>
-                </Modal.Header>
-                <Modal.Body>
-                    {selectedSubid && (
-                        <>
-                            <Form.Label>
-                                Текущая подкатегория: #{selectedSubid.id} ({selectedSubid.quest})
-                            </Form.Label>
-                            <Form.Select
-                                value={targetSubId}
-                                onChange={(e) => setTargetSubId(e.target.value)}
-                            >
-                                <option value="">
-                                    --- Выберите подкатегорию ---
-                                </option>
-                                {getSiblingsForSelectedSub().map(sib => (
-                                    <option key={sib.id} value={sib.id}>
-                                        #{sib.id} - {sib.quest}
-                                    </option>
-                                ))}
-                            </Form.Select>
-                        </>
-                    )}
-                </Modal.Body>
-                <Modal.Footer>
-                        <Button variant="secondary" onClick={handleCloseSwapModalSub}>
-                            Отмена
-                        </Button>
-                        <Button variant="primary" onClick={handleConfirmSwapSub}>
-                            Поменять местами
-                        </Button>
-                </Modal.Footer>
-            </Modal>
-        </Container>
+  const deletePollTrigger = async (lang) => {
+    // Найдём запись, где quest="Голосование" или "Дауыс беру" 
+    // (parentid=2 или 3, answer="poll_trigger")
+    let quest = (lang === 'ru') ? 'Голосование' : 'Дауыс беру';
+    const candidate = answer.answers.find(a =>
+      a.quest === quest && a.answer === 'poll_trigger'
     );
+    if (!candidate) {
+      alert(`Не найдена запись "${quest}"!`);
+      return;
+    }
+    if (!window.confirm(`Удалить "${quest}" (#${candidate.id})?`)) return;
+    try {
+      await deleteAnswer(candidate.id);
+      loadAllAnswers();
+      setInfo(`Удалено "${quest}" (#${candidate.id})`);
+    } catch (err) {
+      alert('Ошибка при удалении poll trigger: ' + err.message);
+    }
+  };
+
+  // === Свап категории ===
+  // Пример: если user вводит idA, idB => вызовем swapCategoriesAndSubs
+  const handleSwap = async () => {
+    if (!swapA || !swapB) {
+      alert('Введите оба ID для свапа.');
+      return;
+    }
+    if (parseInt(swapA) === parseInt(swapB)) {
+      alert('ID категорий не должны совпадать.');
+      return;
+    }
+    if (!window.confirm(`Поменять местами категории #${swapA} и #${swapB}?`)) {
+      return;
+    }
+    try {
+      await swapCategoriesAndSubs(swapA, swapB);
+      loadAllAnswers();
+      setSwapA('');
+      setSwapB('');
+      setInfo(`Свапнуты категории #${swapA} и #${swapB}`);
+    } catch (err) {
+      alert('Ошибка при свапе: ' + err.message);
+    }
+  };
+
+  return (
+    <Container>
+      <h2 style={{marginTop: '15px'}}>Список категорий (parentid=2 или 3)</h2>
+      {info && <p style={{ color: 'blue' }}>{info}</p>}
+
+      <div style={{ border: '1px solid #ccc', padding: '10px', marginBottom: '15px' }}>
+        <h5>Управление "Голосование" / "Дауыс беру"</h5>
+        <div style={{ display: 'flex', gap: '10px' }}>
+          <Button variant="outline-primary" onClick={() => createPollTrigger('ru')}>Создать "Голосование" (рус)</Button>
+          <Button variant="outline-primary" onClick={() => createPollTrigger('kz')}>Создать "Дауыс беру" (каз)</Button>
+          <Button variant="outline-danger" onClick={() => deletePollTrigger('ru')}>Удалить "Голосование" (рус)</Button>
+          <Button variant="outline-danger" onClick={() => deletePollTrigger('kz')}>Удалить "Дауыс беру" (каз)</Button>
+        </div>
+      </div>
+
+      <div style={{ border: '1px solid #ccc', padding: '10px', marginBottom: '15px' }}>
+        <h5>Поменять местами категорий</h5>
+        <p>Введите два ID категорий и нажмите "Swap".</p>
+        <div style={{ display: 'flex', gap: '10px', alignItems:'center' }}>
+          <Form.Control
+            style={{ width:'80px' }}
+            placeholder="ID A"
+            value={swapA}
+            onChange={e => setSwapA(e.target.value)}
+          />
+          <Form.Control
+            style={{ width:'80px' }}
+            placeholder="ID B"
+            value={swapB}
+            onChange={e => setSwapB(e.target.value)}
+          />
+          <Button variant="warning" onClick={handleSwap}>Swap</Button>
+        </div>
+      </div>
+
+      {/** Выводим список корневых категорий (parentid=2 или 3) */}
+      {topCategories.map(cat => (
+        <div key={cat.id} style={{ marginBottom:'40px' }}>
+          <h3>Категория id={cat.id} — {cat.quest}</h3>
+          <Table bordered hover>
+            <thead>
+              <tr>
+                <th>ID</th>
+                <th>Название (quest)</th>
+                <th>answer (имя файла?)</th>
+                <th>Действия</th>
+              </tr>
+            </thead>
+            <tbody>
+              {/** Cама категория (корневая) - тоже показываем как строку? */}
+              <tr>
+                <td>{cat.id}</td>
+                <td>
+                  {cat.quest}
+                  <span style={{color:'grey'}}> (корневая категория)</span>
+                </td>
+                <td>{cat.answer}</td>
+                <td>
+                  <Button
+                    variant="danger"
+                    size="sm"
+                    onClick={() => handleDelete(cat.id)}
+                  >
+                    Удалить
+                  </Button>
+                </td>
+              </tr>
+
+              {/** Рекурсивно подчинённые (и их дети) */}
+              {renderRowsRecursive(cat.id, 1)}
+            </tbody>
+          </Table>
+        </div>
+      ))}
+    </Container>
+  );
 });
 
 export default Answer;

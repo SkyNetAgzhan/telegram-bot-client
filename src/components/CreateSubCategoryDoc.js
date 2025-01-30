@@ -4,35 +4,37 @@ import { createAnswer, fetchAnswers } from "../http/answerApi";
 import { observer } from "mobx-react-lite";
 import { Context } from "../index";
 
-const CreateAnswer = observer(({ show, onHide }) => {
+/**
+ * Создать "подкатегорию" (isnode=false) c документом.
+ * Выбираем родителя (isnode=true).
+ */
+const CreateSubCategoryDoc = observer(({ show, onHide }) => {
     const { answer } = useContext(Context);
 
     const [quest, setQuest] = useState('');
+    const [parentId, setParentId] = useState('');
     const [file, setFile] = useState(null);
-    const [category, setCategory] = useState(''); 
     const [error, setError] = useState('');
 
     useEffect(() => {
         if (show) {
-            // При каждом открытии модалки обновим список
-            fetchAnswers().then(data => {
-                answer.setAnswers(data);
-            }).catch(err => {
-                console.error('Error fetching answers:', err);
-            });
+            fetchAnswers()
+                .then(data => {
+                    answer.setAnswers(data);
+                })
+                .catch(err => console.error('Error fetching answers:', err));
         }
-    }, [answer, show]);
+    }, [show, answer]);
 
-    const addAnswerFunction = async () => {
+    const addSubCategoryWithDoc = async () => {
         setError('');
         const trimmedName = quest.trim();
-
         if (!trimmedName) {
-            setError("Введите название (quest)!");
+            setError("Введите название!");
             return;
         }
-        if (!category) {
-            setError("Выберите категорию (родителя)!");
+        if (!parentId) {
+            setError("Выберите родительскую категорию!");
             return;
         }
         if (!file) {
@@ -40,69 +42,59 @@ const CreateAnswer = observer(({ show, onHide }) => {
             return;
         }
 
-        // Формируем данные для запроса
         const formData = new FormData();
         formData.append('quest', trimmedName);
+        formData.append('isnode', false);       // файл => isnode=false
         formData.append('answertype', 'file');
-        formData.append('parentid', category);
-        formData.append('isnode', false);
+        formData.append('parentid', parentId);
         formData.append('answer', file);
 
         try {
             await createAnswer(formData);
             onHide();
+            // Сбросить поля
             setQuest('');
+            setParentId('');
             setFile(null);
-            setCategory('');
         } catch (err) {
             setError(err.message || "Ошибка при добавлении файла");
         }
     };
 
-    const selectFile = (e) => {
+    // Массив записей
+    const categories = answer.answers.filter(a => {
+        return a.isnode === true && ![1,2,3].includes(a.id);
+    });
+
+    const handleFileChange = (e) => {
         setFile(e.target.files[0]);
     };
 
-    // Фильтруем записи: должны быть (isnode=true), id != 1,2,3
-    const filteredCategories = Array.isArray(answer.answers?.rows)
-        ? answer.answers.rows.filter(
-            (ans) => ans.isnode === true && ![1,2,3].includes(ans.id)
-          )
-        : [];
-
     return (
-        <Modal
-            show={show}
-            onHide={onHide}
-            size="lg"
-            centered
-        >
+        <Modal show={show} onHide={onHide} centered>
             <Modal.Header closeButton>
-                <Modal.Title id="contained-modal-title-vcenter">
-                    Добавить документ (подкатегорию)
-                </Modal.Title>
+                <Modal.Title>Создать подкатегорию с документом</Modal.Title>
             </Modal.Header>
             <Modal.Body>
-                {error && <p style={{ color: 'red', textAlign: 'center' }}>{error}</p>}
+                {error && <p style={{ color: 'red' }}>{error}</p>}
                 <Form>
                     <Form.Group className="mb-3">
-                        <Form.Label>Название документа (quest)</Form.Label>
+                        <Form.Label>Название</Form.Label>
                         <Form.Control
                             value={quest}
                             onChange={e => setQuest(e.target.value)}
-                            type="text"
                             placeholder="Введите название документа"
                         />
                     </Form.Group>
 
                     <Form.Group className="mb-3">
-                        <Form.Label>Выберите родительскую категорию</Form.Label>
+                        <Form.Label>Родитель</Form.Label>
                         <Form.Select
-                            value={category}
-                            onChange={e => setCategory(e.target.value)}
+                            value={parentId}
+                            onChange={e => setParentId(e.target.value)}
                         >
                             <option value="">-- выбрать --</option>
-                            {filteredCategories.map(cat => (
+                            {categories.map(cat => (
                                 <option key={cat.id} value={cat.id}>
                                     {`#${cat.id} — ${cat.quest}`}
                                 </option>
@@ -111,20 +103,20 @@ const CreateAnswer = observer(({ show, onHide }) => {
                     </Form.Group>
 
                     <Form.Group className="mb-3">
-                        <Form.Label>Загрузить файл</Form.Label>
+                        <Form.Label>Выберите файл</Form.Label>
                         <Form.Control
                             type="file"
-                            onChange={selectFile}
+                            onChange={handleFileChange}
                         />
                     </Form.Group>
                 </Form>
             </Modal.Body>
             <Modal.Footer>
-                <Button variant="outline-danger" onClick={onHide}>Закрыть</Button>
-                <Button variant="outline-success" onClick={addAnswerFunction}>Добавить</Button>
+                <Button variant="secondary" onClick={onHide}>Отмена</Button>
+                <Button variant="primary" onClick={addSubCategoryWithDoc}>Создать</Button>
             </Modal.Footer>
         </Modal>
     );
 });
 
-export default CreateAnswer;
+export default CreateSubCategoryDoc;
