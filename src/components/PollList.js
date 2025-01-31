@@ -87,7 +87,7 @@ const PollList = () => {
                   </div>
                 ))}
               </div>
-              <div className="right-column">
+              <div className="right-column" style={{marginLeft: '300px'}}>
                 {poll.poll_options.map((option) => (
                   <div key={option.id}>
                     <strong>{option.optionTextKz}</strong>
