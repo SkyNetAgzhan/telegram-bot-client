@@ -102,7 +102,7 @@ const AnswerTree = () => {
 
   return (
     <div>
-      <h3>Общее дерево (Ответы + Голосования)</h3>
+      <h2>Общее дерево (Ответы + Голосования)</h2>
       {combinedTree.length > 0 ? renderTree(combinedTree) : <p>No data</p>}
     </div>
   );

@@ -3,27 +3,28 @@ import { Container, Table, Button, Form } from 'react-bootstrap';
 import { observer } from 'mobx-react-lite';
 import { Context } from '../index';
 
-import { fetchAnswers, createAnswer, deleteAnswer, swapCategoriesAndSubs } from '../http/answerApi';
+// Импорт методов для CRUD и свапов
+import {
+  fetchAnswers,
+  deleteAnswer,
+  createAnswer,
+  swapCategoriesAndSubs,
+  swapSubs
+} from '../http/answerApi';
 
-// Пример: константы для "глобальных" родительских ID:
+// Импортируем компонент дерева
+import AnswerTree from '../components/AnswerTree';
+
 const RUSSIAN_ROOT = 2;
 const KAZAKH_ROOT = 3;
 
-/**
- * Пример компонента: показывает 
- * 1) Только категории, у которых parentid = 2 или 3 
- * 2) Рекурсивно внутри — подкатегории и документы (isnode=true / isnode=false) 
- * 3) Возможность создать/удалить "Голосование"/"Дауыс беру" (answer="poll_trigger") 
- * 4) Возможность свапнуть категории
- */
 const Answer = observer(() => {
   const { answer } = useContext(Context);
 
-  // Для свапа:
+  // Состояния
   const [swapA, setSwapA] = useState('');
   const [swapB, setSwapB] = useState('');
-
-  // Для "глобальных" сообщений об ошибках и т.д.
+  const [selectedSubId, setSelectedSubId] = useState(null);
   const [info, setInfo] = useState('');
 
   useEffect(() => {
@@ -32,208 +33,245 @@ const Answer = observer(() => {
 
   const loadAllAnswers = async () => {
     try {
-      const data = await fetchAnswers();    // { rows: [...], count: ... }
-      answer.setAnswers(data);              // теперь answer.answers = data.rows (массив)
+      const data = await fetchAnswers(); 
+      answer.setAnswers(data); // теперь answer.answers = data.rows
     } catch (err) {
-      console.error('Ошибка при загрузке answers:', err);
+      console.error('Error loading answers:', err);
     }
   };
 
-  // Фильтруем "корневые" категории, у кого parentid = 2 или 3
-  // Это массив записей (isnode=true обычно, но вы можете проверить).
   const topCategories = answer.answers.filter(
-    (cat) => (cat.parentid === RUSSIAN_ROOT || cat.parentid === KAZAKH_ROOT)
+    cat => cat.parentid === RUSSIAN_ROOT || cat.parentid === KAZAKH_ROOT
   );
 
-  /**
-   * Рекурсивная функция, которая возвращает массив <tr> для всех подчинённых (и их детей).
-   * - `parentId` : число (ID родителя)
-   * - `level` : уровень вложенности (чтобы управлять отступами или стилями)
-   */
-  const renderRowsRecursive = (parentId, level = 0) => {
-    // Находим всех "детей" (isnode= false/true) данного parentId
-    const children = answer.answers.filter(item => item.parentid === parentId);
-
-    // Для каждого ребёнка:
-    //   - если isnode=true (подкатегория без документа), покажем (quest, "Категория")
-    //   - если isnode=false (с документом), тоже отобразим (quest, "Документ", fileName, и т.д.)
-    // рекурсивно добавим детей, если isnode=true
-    const rows = [];
-    children.forEach(child => {
-      const indentStyle = { paddingLeft: `${20 * level}px` };
-
-      rows.push(
-        <tr key={child.id}>
-          <td>{child.id}</td>
-          <td style={indentStyle}>
-            {child.quest}
-            {child.isnode
-              ? <span style={{color:'grey'}}> (категория)</span> 
-              : <span style={{color:'blue'}}> (документ)</span>
-            }
-          </td>
-          <td>{child.answer}</td>
-          <td>
-            {/* Кнопка удаления */}
-            <Button
-              variant="danger"
-              size="sm"
-              onClick={() => handleDelete(child.id)}
-            >
-              Удалить
-            </Button>
-          </td>
-        </tr>
-      );
-
-      // Если это категория (isnode=true), у неё могут быть свои подкатегории => рекурсия
-      if (child.isnode) {
-        const subRows = renderRowsRecursive(child.id, level + 1);
-        rows.push(...subRows);
-      }
-    });
-    return rows;
-  };
-
-  // Удалить запись
   const handleDelete = async (id) => {
-    if (!window.confirm('Точно удалить запись #' + id + '?')) return;
+    if (!window.confirm('Удалить запись id=' + id + '?')) return;
     try {
       await deleteAnswer(id);
-      // Локально обновляем store (или заново загружаем)
       loadAllAnswers();
-      setInfo(`Запись #${id} удалена`);
+      setInfo(`Запись id=${id} удалена`);
     } catch (err) {
       alert('Ошибка при удалении: ' + err.message);
     }
   };
 
-  // === Создать/удалить "Голосование" (рус) или "Дауыс беру" (каз) ===
+  // == Логика "Swap sub" ==
+  const handleSubSwapClick = async (thisSubId) => {
+    // Если ничто не выбрано — выбираем
+    if (!selectedSubId) {
+      setSelectedSubId(thisSubId);
+      setInfo(`Подкатегория id=${thisSubId} выбрана для свапа. Теперь выберите вторую.`);
+      return;
+    }
+
+    // Если пользователь нажал на ту же подкатегорию, сбрасываем
+    if (selectedSubId === thisSubId) {
+      setSelectedSubId(null);
+      setInfo('Отменён выбор подкатегории, свап отменён.');
+      return;
+    }
+
+    // Иначе пытаемся свапать две разные
+    if (!window.confirm(`Свап подкатегорий id=${selectedSubId} и id=${thisSubId}?`)) {
+      return;
+    }
+    try {
+      await swapSubs(selectedSubId, thisSubId);
+      loadAllAnswers();
+      setInfo(`Swap sub id=${selectedSubId} и id=${thisSubId} выполнен`);
+    } catch (err) {
+      alert('Ошибка при swapSubs: ' + err.message);
+    } finally {
+      // сбрасываем выбор
+      setSelectedSubId(null);
+    }
+  };
+
+
+  // Рендер рекурсивных строк
+  const renderRowsRecursive = (parentId, level = 0) => {
+    const children = answer.answers.filter(item => item.parentid === parentId);
+    let rows = [];
+
+    children.forEach(child => {
+      const styleIndent = { paddingLeft: `${20 * level}px` };
+      // Если child.id = selectedSubId => подсветим (variant="success")
+      const isSelected = (child.id === selectedSubId);
+
+      rows.push(
+        <tr key={child.id}>
+          <td>{child.id}</td>
+          <td style={styleIndent}>
+            {child.quest}
+            {child.isnode
+              ? <span style={{color: 'gray'}}> (категория)</span>
+              : <span style={{color: 'blue'}}> (документ)</span>
+            }
+          </td>
+          <td>{child.answer}</td>
+          <td style={{ textAlign: 'center' }}>
+            <Button
+              variant="danger"
+              size="sm"
+              onClick={() => handleDelete(child.id)}
+              style={{ marginRight: '8px' }}
+            >
+              Удалить
+            </Button>
+
+            <Button
+              variant={isSelected ? "success" : "secondary"}
+              size="sm"
+              onClick={() => handleSubSwapClick(child.id)}
+            >
+              Swap sub
+            </Button>
+          </td>
+        </tr>
+      );
+
+      if (child.isnode) {
+        rows = rows.concat(renderRowsRecursive(child.id, level + 1));
+      }
+    });
+
+    return rows;
+  };
+
+  // == Swap категорий ==
+  const handleSwapCategories = async () => {
+    if (!swapA || !swapB) {
+      alert('Укажите оба ID для свапа категорий');
+      return;
+    }
+    if (parseInt(swapA) === parseInt(swapB)) {
+      alert('ID категорий не должны совпадать');
+      return;
+    }
+    if (!window.confirm(`Swap категорий id=${swapA} и id=${swapB}?`)) return;
+
+    try {
+      await swapCategoriesAndSubs(swapA, swapB);
+      loadAllAnswers();
+      setInfo(`Swap категорий id=${swapA} и id=${swapB} выполнен`);
+      setSwapA('');
+      setSwapB('');
+    } catch (err) {
+      alert('Ошибка swapCategories: ' + err.message);
+    }
+  };
+
+  // == Создать / Удалить "Голосование" ==
   const createPollTrigger = async (lang) => {
-    // lang='ru' => "Голосование", parentid=2
-    // lang='kz' => "Дауыс беру", parentid=3
-    let quest = (lang === 'ru') ? 'Голосование' : 'Дауыс беру';
-    let parent = (lang === 'ru') ? RUSSIAN_ROOT : KAZAKH_ROOT;
+    const parentId = (lang === 'ru') ? RUSSIAN_ROOT : KAZAKH_ROOT;
+    const quest = (lang === 'ru') ? 'Голосование' : 'Дауыс беру';
     const formData = new FormData();
     formData.append('quest', quest);
     formData.append('answer', 'poll_trigger');
     formData.append('answertype', 'poll');
-    formData.append('isnode', false);  // не папка, а триггер
-    formData.append('parentid', parent);
+    formData.append('isnode', false);
+    formData.append('parentid', parentId);
 
     try {
       await createAnswer(formData);
       loadAllAnswers();
       setInfo(`Создано "${quest}"`);
     } catch (err) {
-      alert('Ошибка при создании: ' + err.message);
+      alert('Ошибка create poll_trigger: ' + err.message);
     }
   };
 
   const deletePollTrigger = async (lang) => {
-    // Найдём запись, где quest="Голосование" или "Дауыс беру" 
-    // (parentid=2 или 3, answer="poll_trigger")
-    let quest = (lang === 'ru') ? 'Голосование' : 'Дауыс беру';
+    const quest = (lang === 'ru') ? 'Голосование' : 'Дауыс беру';
     const candidate = answer.answers.find(a =>
       a.quest === quest && a.answer === 'poll_trigger'
     );
     if (!candidate) {
-      alert(`Не найдена запись "${quest}"!`);
+      alert(`Не найдена запись "${quest}"`);
       return;
     }
-    if (!window.confirm(`Удалить "${quest}" (#${candidate.id})?`)) return;
+    if (!window.confirm(`Удалить "${quest}" (id=${candidate.id})?`)) return;
+
     try {
       await deleteAnswer(candidate.id);
       loadAllAnswers();
-      setInfo(`Удалено "${quest}" (#${candidate.id})`);
+      setInfo(`Удалено "${quest}" (id=${candidate.id})`);
     } catch (err) {
-      alert('Ошибка при удалении poll trigger: ' + err.message);
-    }
-  };
-
-  // === Свап категории ===
-  // Пример: если user вводит idA, idB => вызовем swapCategoriesAndSubs
-  const handleSwap = async () => {
-    if (!swapA || !swapB) {
-      alert('Введите оба ID для свапа.');
-      return;
-    }
-    if (parseInt(swapA) === parseInt(swapB)) {
-      alert('ID категорий не должны совпадать.');
-      return;
-    }
-    if (!window.confirm(`Поменять местами категории #${swapA} и #${swapB}?`)) {
-      return;
-    }
-    try {
-      await swapCategoriesAndSubs(swapA, swapB);
-      loadAllAnswers();
-      setSwapA('');
-      setSwapB('');
-      setInfo(`Свапнуты категории #${swapA} и #${swapB}`);
-    } catch (err) {
-      alert('Ошибка при свапе: ' + err.message);
+      alert('Ошибка удаления poll_trigger: ' + err.message);
     }
   };
 
   return (
     <Container>
-      <h2 style={{marginTop: '15px'}}>Список категорий (parentid=2 или 3)</h2>
+      {/* Дерево сверху */}
+      <AnswerTree />
+
+      <h2>Создание кнопки Голосование</h2>
       {info && <p style={{ color: 'blue' }}>{info}</p>}
 
-      <div style={{ border: '1px solid #ccc', padding: '10px', marginBottom: '15px' }}>
-        <h5>Управление "Голосование" / "Дауыс беру"</h5>
-        <div style={{ display: 'flex', gap: '10px' }}>
-          <Button variant="outline-primary" onClick={() => createPollTrigger('ru')}>Создать "Голосование" (рус)</Button>
-          <Button variant="outline-primary" onClick={() => createPollTrigger('kz')}>Создать "Дауыс беру" (каз)</Button>
-          <Button variant="outline-danger" onClick={() => deletePollTrigger('ru')}>Удалить "Голосование" (рус)</Button>
-          <Button variant="outline-danger" onClick={() => deletePollTrigger('kz')}>Удалить "Дауыс беру" (каз)</Button>
+      <div style={{ border:'1px solid #ccc', padding:'10px', marginBottom:'15px' }}>
+        <h5>Создать / Удалить "Голосование" (рус) / "Дауыс беру" (каз)</h5>
+        <div style={{ display:'flex', gap:'10px', flexWrap:'wrap' }}>
+          <Button variant="outline-primary" onClick={() => createPollTrigger('ru')}>
+            Создать "Голосование"
+          </Button>
+          <Button variant="outline-primary" onClick={() => createPollTrigger('kz')}>
+            Создать "Дауыс беру"
+          </Button>
+          <Button variant="outline-danger" onClick={() => deletePollTrigger('ru')}>
+            Удалить "Голосование"
+          </Button>
+          <Button variant="outline-danger" onClick={() => deletePollTrigger('kz')}>
+            Удалить "Дауыс беру"
+          </Button>
         </div>
       </div>
 
-      <div style={{ border: '1px solid #ccc', padding: '10px', marginBottom: '15px' }}>
-        <h5>Поменять местами категорий</h5>
-        <p>Введите два ID категорий и нажмите "Swap".</p>
-        <div style={{ display: 'flex', gap: '10px', alignItems:'center' }}>
+      <div style={{ border:'1px solid #ccc', padding:'10px', marginBottom:'15px' }}>
+        <h5>Поменять местами категории (idA, idB)</h5>
+        <div style={{ display:'flex', gap:'10px', alignItems:'center' }}>
           <Form.Control
-            style={{ width:'80px' }}
+            style={{ width: '80px' }}
             placeholder="ID A"
             value={swapA}
             onChange={e => setSwapA(e.target.value)}
           />
           <Form.Control
-            style={{ width:'80px' }}
+            style={{ width: '80px' }}
             placeholder="ID B"
             value={swapB}
             onChange={e => setSwapB(e.target.value)}
           />
-          <Button variant="warning" onClick={handleSwap}>Swap</Button>
+          <Button variant="warning" onClick={handleSwapCategories}>
+            Swap
+          </Button>
+        </div>
+        <div style={{ color:'gray', fontSize:'small' }}>
+          (Внимание: здесь можно менять только корневые категории!)
         </div>
       </div>
 
-      {/** Выводим список корневых категорий (parentid=2 или 3) */}
       {topCategories.map(cat => (
-        <div key={cat.id} style={{ marginBottom:'40px' }}>
-          <h3>Категория id={cat.id} — {cat.quest}</h3>
+        <div key={cat.id} style={{ marginBottom:'30px' }}>
+          <h3>Категория id={cat.id}: {cat.quest}</h3>
           <Table bordered hover>
             <thead>
               <tr>
                 <th>ID</th>
                 <th>Название (quest)</th>
-                <th>answer (имя файла?)</th>
-                <th>Действия</th>
+                <th>answer</th>
+                <th style={{ textAlign:'center' }}>Действие</th>
               </tr>
             </thead>
             <tbody>
-              {/** Cама категория (корневая) - тоже показываем как строку? */}
               <tr>
                 <td>{cat.id}</td>
                 <td>
                   {cat.quest}
-                  <span style={{color:'grey'}}> (корневая категория)</span>
+                  <span style={{ color:'gray' }}> (корень)</span>
                 </td>
                 <td>{cat.answer}</td>
-                <td>
+                <td style={{ textAlign:'center' }}>
                   <Button
                     variant="danger"
                     size="sm"
@@ -244,7 +282,6 @@ const Answer = observer(() => {
                 </td>
               </tr>
 
-              {/** Рекурсивно подчинённые (и их дети) */}
               {renderRowsRecursive(cat.id, 1)}
             </tbody>
           </Table>
