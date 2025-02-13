@@ -1,10 +1,13 @@
 import AddAnswer from './pages/AddAnswer';
-import {LOGIN_ROUTE, REGISTRATION_ROUTE, ANSWER_ROUTE, ANSWER_CREATE, POLLS_CREATE, POLLS_ROUTE, ANALYTICS_ROUTE} from './utils/consts';
+import {LOGIN_ROUTE, REGISTRATION_ROUTE, ANSWER_ROUTE, ANSWER_CREATE, POLLS_CREATE, POLLS_ROUTE, ANALYTICS_ROUTE, NEWS_ROUTE, NEWS_ADD_ROUTE, NEWS_EDIT_ROUTE} from './utils/consts';
 import Auth from './pages/Auth';
 import Answer from './pages/Answer';
 import CreatePoll from './components/CreatePoll';
 import PollList from './components/PollList';
 import BotAnalytics from './components/BotAnalytics';
+import AllNews from './pages/News/AllNews';
+import AddNews from './pages/News/AddNews';
+import EditNews from './pages/News/EditNews';
 
 export const authRoutes = [
     {
@@ -26,6 +29,18 @@ export const authRoutes = [
     {
         path: ANALYTICS_ROUTE,
         Component: BotAnalytics,
+    },
+    {
+        path: NEWS_ROUTE,
+        Component: AllNews
+    },
+    {
+        path: NEWS_ADD_ROUTE,
+        Component: AddNews
+    },
+    {
+        path: NEWS_EDIT_ROUTE,
+        Component: EditNews
     }
 ]
 

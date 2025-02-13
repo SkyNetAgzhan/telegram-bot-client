@@ -4,7 +4,7 @@ import React, { useContext } from 'react';
 import { Context } from '../index';
 import Nav from 'react-bootstrap/Nav';
 import Navbar from 'react-bootstrap/Navbar';
-import { Button, Container } from 'react-bootstrap';
+import { Button, Container, NavDropdown } from 'react-bootstrap';
 import { observer } from 'mobx-react-lite';
 import { useHistory } from 'react-router-dom';
 // Импорт ваших констант
@@ -14,7 +14,10 @@ import {
   ANSWER_ROUTE, 
   LOGIN_ROUTE, 
   POLLS_CREATE, 
-  POLLS_ROUTE 
+  POLLS_ROUTE,
+  NEWS_ROUTE,
+  NEWS_ADD_ROUTE,
+  NEWS_EDIT_ROUTE
 } from '../utils/consts';
 
 const TempNavBar = observer(() => {
@@ -82,6 +85,18 @@ const TempNavBar = observer(() => {
                         >
                             Добавить
                         </Button>
+
+                        <NavDropdown style={{ marginRight: 12 }} title="Новости" id="news-dropdown" menuVariant="dark">
+                            <NavDropdown.Item onClick={() => history.push(NEWS_ROUTE)}>
+                                Все Новости
+                            </NavDropdown.Item>
+                            <NavDropdown.Item onClick={() => history.push(NEWS_ADD_ROUTE)}>
+                                Добавить Новости
+                            </NavDropdown.Item>
+                            <NavDropdown.Item onClick={() => history.push(NEWS_EDIT_ROUTE)}>
+                                Редактировать Новости
+                            </NavDropdown.Item>
+                        </NavDropdown>
 
                         <Button 
                             variant="outline-light" 
