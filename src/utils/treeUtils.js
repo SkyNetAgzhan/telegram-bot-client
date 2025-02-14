@@ -1,5 +1,3 @@
-// src/utils/treeUtils.js
-
 export const buildTree = (answers, parentId = null) => {
     const tree = [];
     answers.forEach(answer => {

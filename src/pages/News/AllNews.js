@@ -1,28 +1,39 @@
-import React, { useEffect, useState} from "react";
-import { Container, Table } from "react-bootstrap";
-import axios from "axios";
+import React, { useEffect, useState } from "react";
+import { Button, Container, Table } from "react-bootstrap";
+import { fetchNews , deleteNews} from "../../http/newsApi";
 
 const AllNews = () => {
   const [news, setNews] = useState([]);
 
   useEffect(() => {
-    fetchNews();
+    loadNews();
   }, []);
 
-  const fetchNews = async () => {
+  const loadNews = async () => {
     try {
-      const { data } = await axios.get(`${process.env.REACT_APP_API_URL}/api/news`);
+      const data = await fetchNews();
       setNews(data);
-    } catch(err){
-      console.error('Ошибка при загрузке новостей: ', err);
+    }catch(err){
+      console.error("Ошибка при загрузке новостей: ", err);
     }
-  }
+  };
+  
+  const handleDelete = async (id) => {
+    if (window.confirm("Вы действительно хотите удалить эту новость?")){
+      try {
+        await deleteNews(id);
+        loadNews();
+      }catch (err){
+        console.error("Ошибка при удалении новости:", err);
+      }
+    }
+  };
 
   return (
     <Container>
       <h2>Все новости</h2>
       <Table striped bordered hover>
-        <thread>
+        <thead>
           <tr>
             <th>ID</th>
             <th>Тема</th>
@@ -30,9 +41,9 @@ const AllNews = () => {
             <th>Текст</th>
             <th>Файл</th>
           </tr>
-        </thread>
+        </thead>
         <tbody>
-          {news.map(n => {
+          {news.map((n) => (
             <tr key={n.id}>
               <td>{n.id}</td>
               <td>{n.topic}</td>
@@ -40,17 +51,18 @@ const AllNews = () => {
               <td>{n.text}</td>
               <td>
                 {n.file ? (
-                  <a
-                    href={`${process.env.REAT_APP_API_URL}/files/${n.file}`}
-                    target="_blank"
-                    rel="noreferrer"
-                  >
-                    Смотреть файл
-                  </a>
-                ): 'Нет'}
+                  n.file
+                ) : (
+                  "Нет"
+                )}
+              </td>
+              <td>
+                <Button variant="danger" onClick={() => handleDelete(n.id)}>
+                  Удалить
+                </Button>
               </td>
             </tr>
-          })}
+          ))}
         </tbody>
       </Table>
     </Container>

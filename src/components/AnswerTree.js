@@ -2,15 +2,18 @@ import React, { useEffect, useState } from 'react';
 import { fetchAnswers } from '../http/answerApi';
 import { fetchPolls } from '../http/PollApi';
 import { buildTree } from '../utils/treeUtils';
+import { fetchNews } from '../http/newsApi';
 
 /**
  * Дерево, в котором:
  *  - сначала показываем дерево answers (из buildTree),
- *  - затем "ГОЛОСОВАНИЯ" отдельной веткой, со списком опросов.
+ *  - затем "Голосования" отдельной веткой, со списком опросов.
+ *  - затем "Новости" отдельной веткой
  */
 const AnswerTree = () => {
   const [answerTree, setAnswerTree] = useState([]);
   const [pollTree, setPollTree] = useState([]);
+  const [newsTree, setNewsTree] = useState([]);
   const [expandedNodes, setExpandedNodes] = useState([]); // какие узлы раскрыты
 
   useEffect(() => {
@@ -27,8 +30,6 @@ const AnswerTree = () => {
       }
       // 2) Загружаем опросы
       const pollsData = await fetchPolls();
-      // Превратим их в "дерево" вида: 
-      //  { id:'poll_x', quest:'Вопрос ???', children: [ {id:'option_1', quest:'Опция 1'}, ...] }
       const pollNodes = pollsData.map((poll) => {
         // Формируем «дочерние» узлы — варианты
         const optionChildren = poll.poll_options.map((opt) => ({
@@ -43,16 +44,33 @@ const AnswerTree = () => {
           children: optionChildren
         };
       });
-      // Оборачиваем единым виртуальным родителем "ГОЛОСОВАНИЯ"
+      // Оборачиваем единым виртуальным родителем "Голосования"
       // Можно дать ему любой ID (например, -100)
       const pollTreeRoot = [
         {
           id: 'poll_root',
-          quest: 'ГОЛОСОВАНИЯ',
+          quest: 'Голосования',
           children: pollNodes
         }
       ];
       setPollTree(pollTreeRoot);
+
+      //3) Загружаем новости
+      const newsData = await fetchNews();
+      const newsNodes = newsData.map(newsItem => ({
+        id: `news_${newsItem.id}`,
+        quest: newsItem.topic,
+        children: [] // новости без вложенных элементов
+      }));
+      const newsTreeRoot = [
+        {
+          id: 'news_root',
+          quest: 'Новости',
+          children: newsNodes
+        }
+      ];
+      setNewsTree(newsTreeRoot);
+
     } catch (error) {
       console.error('Error loading data:', error);
     }
@@ -97,12 +115,13 @@ const AnswerTree = () => {
   // Комбинируем дерево ответов + дерево голосований
   const combinedTree = [
     ...answerTree,
-    ...pollTree
+    ...pollTree,
+    ...newsTree
   ];
 
   return (
     <div>
-      <h2>Общее дерево (Ответы + Голосования)</h2>
+      <h2>Общее дерево (Ответы + Голосования + Новости)</h2>
       {combinedTree.length > 0 ? renderTree(combinedTree) : <p>No data</p>}
     </div>
   );

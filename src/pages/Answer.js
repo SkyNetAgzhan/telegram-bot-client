@@ -182,24 +182,101 @@ const Answer = observer(() => {
   };
 
   const deletePollTrigger = async (lang) => {
-    const quest = (lang === 'ru') ? 'Голосование' : 'Дауыс беру';
-    const candidate = answer.answers.find(a =>
-      a.quest === quest && a.answer === 'poll_trigger'
-    );
-    if (!candidate) {
-      alert(`Не найдена запись "${quest}"`);
-      return;
-    }
-    if (!window.confirm(`Удалить "${quest}" (id=${candidate.id})?`)) return;
-
-    try {
-      await deleteAnswer(candidate.id);
-      loadAllAnswers();
-      setInfo(`Удалено "${quest}" (id=${candidate.id})`);
-    } catch (err) {
-      alert('Ошибка удаления poll_trigger: ' + err.message);
+    if (lang === 'ru') {
+      // Для русского голосования: quest и answer должны быть "Голосование"
+      const candidate = answer.answers.find(a =>
+        a.quest === 'Голосование' && a.answer === 'Голосование'
+      );
+      if (!candidate) {
+        alert(`Не найдена запись "Голосование"`);
+        return;
+      }
+      if (!window.confirm(`Удалить "Голосование" (id=${candidate.id})?`)) return;
+      try {
+        await deleteAnswer(candidate.id);
+        loadAllAnswers();
+        setInfo(`Удалено "Голосование" (id=${candidate.id})`);
+      } catch (err) {
+        alert('Ошибка удаления голосования: ' + err.message);
+      }
+    } else {
+      // Для казахского голосования: quest = "Дауыс беру", answer = "poll_trigger"
+      const candidate = answer.answers.find(a =>
+        a.quest === 'Дауыс беру' && a.answer === 'poll_trigger'
+      );
+      if (!candidate) {
+        alert(`Не найдена запись "Дауыс беру"`);
+        return;
+      }
+      if (!window.confirm(`Удалить "Дауыс беру" (id=${candidate.id})?`)) return;
+      try {
+        await deleteAnswer(candidate.id);
+        loadAllAnswers();
+        setInfo(`Удалено "Дауыс беру" (id=${candidate.id})`);
+      } catch (err) {
+        alert('Ошибка удаления голосования: ' + err.message);
+      }
     }
   };
+  
+   // == Создать / Удалить "Новости" ==
+   const createPollTriggerNews = async (lang) => {
+    const parentId = (lang === 'ru') ? RUSSIAN_ROOT : KAZAKH_ROOT;
+    const quest = (lang === 'ru') ? 'Новости' : 'Жаңалықтар';
+    const formData = new FormData();
+    formData.append('quest', quest);
+    formData.append('answer', 'news_trigger');
+    formData.append('answertype', 'news');
+    formData.append('isnode', false);
+    formData.append('parentid', parentId);
+
+    try {
+      await createAnswer(formData);
+      loadAllAnswers();
+      setInfo(`Создано "${quest}"`);
+    } catch (err) {
+      alert('Ошибка create news_trigger: ' + err.message);
+    }
+  };
+
+  const deletePollTriggerNews = async (lang) => {
+    if (lang === 'ru') {
+      // Для русских новостей: quest и answer равны "Новости"
+      const candidate = answer.answers.find(a =>
+        a.quest === 'Новости' && a.answer === 'Новости'
+      );
+      if (!candidate) {
+        alert(`Не найдена запись "Новости"`);
+        return;
+      }
+      if (!window.confirm(`Удалить "Новости" (id=${candidate.id})?`)) return;
+      try {
+        await deleteAnswer(candidate.id);
+        loadAllAnswers();
+        setInfo(`Удалено "Новости" (id=${candidate.id})`);
+      } catch (err) {
+        alert('Ошибка удаления новости: ' + err.message);
+      }
+    } else {
+      // Для казахских новостей: quest и answer равны "Жаңалықтар"
+      const candidate = answer.answers.find(a =>
+        a.quest === 'Жаңалықтар' && a.answer === 'Жаңалықтар'
+      );
+      if (!candidate) {
+        alert(`Не найдена запись "Жаңалықтар"`);
+        return;
+      }
+      if (!window.confirm(`Удалить "Жаңалықтар" (id=${candidate.id})?`)) return;
+      try {
+        await deleteAnswer(candidate.id);
+        loadAllAnswers();
+        setInfo(`Удалено "Жаңалықтар" (id=${candidate.id})`);
+      } catch (err) {
+        alert('Ошибка удаления новости: ' + err.message);
+      }
+    }
+  };
+  
 
   return (
     <Container>
@@ -223,6 +300,27 @@ const Answer = observer(() => {
           </Button>
           <Button variant="outline-danger" onClick={() => deletePollTrigger('kz')}>
             Удалить "Дауыс беру"
+          </Button>
+        </div>
+      </div>
+
+      <h2>Создание кнопки Новости</h2>
+      {info && <p style={{ color: 'red' }}>{info}</p>}
+
+      <div style={{ border:'1px solid #ccc', padding:'10px', marginBottom:'15px' }}>
+        <h5>Создать / Удалить "Новости" (рус) / "Жаңалықтар" (каз)</h5>
+        <div style={{ display:'flex', gap:'10px', flexWrap:'wrap' }}>
+          <Button variant="outline-primary" onClick={() => createPollTriggerNews('ru')}>
+            Создать "Новости"
+          </Button>
+          <Button variant="outline-primary" onClick={() => createPollTriggerNews('kz')}>
+            Создать "Жаңалықтар"
+          </Button>
+          <Button variant="outline-danger" onClick={() => deletePollTriggerNews('ru')}>
+            Удалить "Новости"
+          </Button>
+          <Button variant="outline-danger" onClick={() => deletePollTriggerNews('kz')}>
+            Удалить "Жаңалықтар"
           </Button>
         </div>
       </div>
